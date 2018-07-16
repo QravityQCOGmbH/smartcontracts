@@ -1,0 +1,7 @@
+/token/build/
+npm-debug.log
+/token/node_modules/
+/token/.myganache/
+/.idea/
+/token/coverage/
+/token/coverage.json
