@@ -1,0 +1,2 @@
+# Make linguist (at GitHub) understand .sol as Solidity code.
+*.sol linguist-language=Solidity
