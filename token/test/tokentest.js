@@ -1,13 +1,13 @@
 import EVMThrow from './helpers/EVMThrow'
 
 import {
-  advanceBlock,
-  advanceToBlock,
-  increaseTime,
-  increaseTimeTo,
-  duration,
-  revert,
-  latestTime
+    advanceBlock,
+    advanceToBlock,
+    increaseTime,
+    increaseTimeTo,
+    duration,
+    revert,
+    latestTime
 } from 'truffle-test-helpers';
 
 const BigNumber = web3.BigNumber;
@@ -47,7 +47,7 @@ contract('Token funded', function (accounts) {
         Initial: 0, // deployment time
         ValuationSet: 1, // whitelist addresses, accept funds, update balances
         Ico: 2, // whitelist addresses, accept funds, update balances
-        Underfunded: 3, // ICO time finished and minimal amount not raised
+        Aborted: 3, // ICO aborted
         Operational: 4, // production phase
         Paused: 5         // for contract upgrades
     };
@@ -84,7 +84,7 @@ contract('Token funded', function (accounts) {
         let theToken = await TokenContract.deployed();
         const tokenSendAmount = 0;
         await theToken.transfer(user3, tokenSendAmount, {from: expectedReserves}).should.be.rejectedWith(revert);
-     });
+    });
 
     it("should reject adding a presale amount during Initial.", async function () {
         let theToken = await TokenContract.deployed();
@@ -310,22 +310,32 @@ contract('Token funded', function (accounts) {
     it("should accept stopping ICO by anyone after ICO timeout.", async function () {
         let theToken = await TokenContract.deployed();
         (await theToken.state()).should.be.bignumber.equal(States.Ico);
+        const soldTokens = await theToken.soldTokens();
+        const reservesBefore = (await theToken.balanceOf(expectedReserves));
         const callResult = await theToken.anyoneEndICO().should.not.be.rejected;
+        const totalSupply = await theToken.totalSupply();
+        const reservesAfter = (await theToken.balanceOf(expectedReserves));
+        const teamWallet = await theToken.teamWallet();
+        const teamTokens = await theToken.balanceOf(teamWallet);
         const expTxEvent1 = callResult.logs[0];
         expTxEvent1.event.should.be.equal('Transfer');
         expTxEvent1.args.from.should.be.equal(expectedReserves);
         expTxEvent1.args.to.should.be.equal(await theToken.teamWallet());
+        expTxEvent1.args.value.should.be.bignumber.equal(totalSupply.mul(22).div(100));
+        expTxEvent1.args.value.should.be.bignumber.equal(teamTokens);
         const expTxEvent2 = callResult.logs[1];
         expTxEvent2.event.should.be.equal('Transfer');
         expTxEvent2.args.from.should.be.equal(expectedReserves);
         expTxEvent2.args.to.should.be.equal('0x0000000000000000000000000000000000000000');
+        // Burned amount is difference of reserves minus the team tokens.
+        expTxEvent2.args.value.should.be.bignumber.equal(reservesBefore.minus(reservesAfter).minus(teamTokens));
         const expFinishedEvent = callResult.logs[2];
         expFinishedEvent.event.should.be.equal('MintFinished');
         const expStateEvent = callResult.logs[3];
         expStateEvent.event.should.be.equal('StateTransition');
         expStateEvent.args.oldState.should.be.bignumber.equal(States.Ico);
         expStateEvent.args.newState.should.be.bignumber.equal(States.Operational);
-        (await theToken.totalSupply()).should.be.bignumber.not.above(await theToken.maxTotalSupply());
+        totalSupply.should.be.bignumber.not.above(await theToken.maxTotalSupply());
         (await theToken.state()).should.be.bignumber.equal(States.Operational);
     });
 
@@ -451,17 +461,17 @@ contract('Token funded', function (accounts) {
         await increaseTimeTo((new Date("2020-03-31T23:50:00Z")).getTime() / 1000);
         await timelock.release(user1, 1, {from: expectedTeamControl}).should.be.rejectedWith(revert);
         let testSet = [{tstamp: (new Date("2020-04-01T00:10:00Z")).getTime() / 1000, pct: 20},
-                       {tstamp: (new Date("2020-07-01T00:10:00Z")).getTime() / 1000, pct: 30},
-                       {tstamp: (new Date("2020-10-01T00:10:00Z")).getTime() / 1000, pct: 40},
-                       {tstamp: (new Date("2021-01-01T00:10:00Z")).getTime() / 1000, pct: 50},
-                       {tstamp: (new Date("2021-04-01T00:10:00Z")).getTime() / 1000, pct: 60},
-                       {tstamp: (new Date("2021-07-01T00:10:00Z")).getTime() / 1000, pct: 70},
-                       {tstamp: (new Date("2021-10-01T00:10:00Z")).getTime() / 1000, pct: 80},
-                       {tstamp: (new Date("2022-01-01T00:10:00Z")).getTime() / 1000, pct: 90},
-                       {tstamp: (new Date("2022-04-01T00:10:00Z")).getTime() / 1000, pct: 100}];
+            {tstamp: (new Date("2020-07-01T00:10:00Z")).getTime() / 1000, pct: 30},
+            {tstamp: (new Date("2020-10-01T00:10:00Z")).getTime() / 1000, pct: 40},
+            {tstamp: (new Date("2021-01-01T00:10:00Z")).getTime() / 1000, pct: 50},
+            {tstamp: (new Date("2021-04-01T00:10:00Z")).getTime() / 1000, pct: 60},
+            {tstamp: (new Date("2021-07-01T00:10:00Z")).getTime() / 1000, pct: 70},
+            {tstamp: (new Date("2021-10-01T00:10:00Z")).getTime() / 1000, pct: 80},
+            {tstamp: (new Date("2022-01-01T00:10:00Z")).getTime() / 1000, pct: 90},
+            {tstamp: (new Date("2022-04-01T00:10:00Z")).getTime() / 1000, pct: 100}];
         for (let i = 0; i < testSet.length; i++) {
-          (await timelock.availablePercent(testSet[i].tstamp)).should.be.bignumber.equal(testSet[i].pct);
-          (await timelock.availableAmount(testSet[i].tstamp)).should.be.bignumber.equal((await theToken.balanceOf(teamWallet)).mul(testSet[i].pct).div(100));
+            (await timelock.availablePercent(testSet[i].tstamp)).should.be.bignumber.equal(testSet[i].pct);
+            (await timelock.availableAmount(testSet[i].tstamp)).should.be.bignumber.equal((await theToken.balanceOf(teamWallet)).mul(testSet[i].pct).div(100));
         }
         const initialAmount = (await theToken.balanceOf(teamWallet));
         const takeoutAmount = initialAmount.div(10); // 10%
@@ -507,7 +517,7 @@ contract('Token funded and stopped by admin and operational.', function (account
         Initial: 0, // deployment time
         ValuationSet: 1, // whitelist addresses, accept funds, update balances
         Ico: 2, // whitelist addresses, accept funds, update balances
-        Underfunded: 3, // ICO time finished and minimal amount not raised
+        Aborted: 3, // ICO aborted
         Operational: 4, // production phase
         Paused: 5         // for contract upgrades
     }
@@ -578,7 +588,7 @@ contract('TokenContract accepts large numbers of ICO invests small and large but
         Initial: 0, // deployment time
         ValuationSet: 1, // whitelist addresses, accept funds, update balances
         Ico: 2, // whitelist addresses, accept funds, update balances
-        Underfunded: 3, // ICO time finished and minimal amount not raised
+        Aborted: 3, // ICO aborted
         Operational: 4, // production phase
         Paused: 5         // for contract upgrades
     }
@@ -676,7 +686,7 @@ contract('TokenContract paused and restarted and aborted', function (accounts) {
         Initial: 0, // deployment time
         ValuationSet: 1, // whitelist addresses, accept funds, update balances
         Ico: 2, // whitelist addresses, accept funds, update balances
-        Underfunded: 3, // ICO time finished and minimal amount not raised
+        Aborted: 3, // ICO aborted
         Operational: 4, // production phase
         Paused: 5         // for contract upgrades
     }
@@ -748,7 +758,7 @@ contract('TokenContract paused and restarted and aborted', function (accounts) {
     it("should be aborted when called with state control key.", async function () {
         let theToken = await TokenContract.deployed();
         await theToken.abort({from: expectedStateControl});
-        (await theToken.state()).should.be.bignumber.equal(States.Underfunded);
+        (await theToken.state()).should.be.bignumber.equal(States.Aborted);
     });
 
     it("should reject new funding in underfunded state.", async function () {

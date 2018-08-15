@@ -15,7 +15,7 @@ contract QCOToken is StandardToken {
         Initial, // deployment time
         ValuationSet,
         Ico, // whitelist addresses, accept funds, update balances
-        Underfunded, // ICO time finished and minimal amount not raised
+        Aborted, // ICO aborted
         Operational, // production phase
         Paused         // for contract upgrades
     }
@@ -134,7 +134,9 @@ contract QCOToken is StandardToken {
     {
         require(whitelist[msg.sender] == true);
         require(msg.value > 0);
-        require(msg.data.length == 0);
+        // We have reports that some wallet contracts may end up sending a single null-byte.
+        // Still reject calls of unknown functions, which are always at least 4 bytes of data.
+        require(msg.data.length < 4);
         require(block.number < endBlock);
 
         uint256 soldToTuserWithBonus = calcBonus(msg.value);
@@ -190,7 +192,7 @@ contract QCOToken is StandardToken {
         state = _newState;
     }
     // ICO contract configuration function
-   // new_ETH_QCO is the new rate of ETH in QCO to use when no bonus applies
+    // new_ETH_QCO is the new rate of ETH in QCO to use when no bonus applies
     // newEndBlock is the absolute block number at which the ICO must stop. It must be set after now + silence period.
     function updateEthICOVariables(uint256 _new_ETH_QCO, uint256 _newEndBlock)
     public
@@ -252,7 +254,7 @@ contract QCOToken is StandardToken {
 
         uint256 reservesAmount = totalSupply.sub(soldTokens).sub(teamAmount);
         // Burn all tokens over the target amount.
-        Transfer(reserves, 0x0, balances[reserves].sub(reservesAmount));
+        Transfer(reserves, 0x0, balances[reserves].sub(reservesAmount).sub(teamAmount));
         balances[reserves] = reservesAmount;
 
         mintingFinished = true;
@@ -284,7 +286,7 @@ contract QCOToken is StandardToken {
     onlyStateControl
     requireState(States.Paused)
     {
-        moveToState(States.Underfunded);
+        moveToState(States.Aborted);
     }
 
     //un-pause
@@ -299,7 +301,7 @@ contract QCOToken is StandardToken {
     //in case of a failed/aborted ICO every investor can get back their money
     function requestRefund()
     public
-    requireState(States.Underfunded)
+    requireState(States.Aborted)
     {
         require(ethPossibleRefunds[msg.sender] > 0);
         //there is no need for updateAccount(msg.sender) since the token never became active.
@@ -322,7 +324,6 @@ contract QCOToken is StandardToken {
     function rescueToken(ERC20Basic _foreignToken, address _to)
     public
     onlyTokenAssignmentControl
-    requireState(States.Operational)
     {
         _foreignToken.transfer(_to, _foreignToken.balanceOf(this));
     }

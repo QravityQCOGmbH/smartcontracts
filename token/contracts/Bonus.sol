@@ -12,12 +12,12 @@ library Bonus {
     internal
     {
         data.factors = [uint256(300), 250, 200, 150, 100, 50, 0];
-        data.cutofftimes = [toTimestamp(2018, 8, 12),
-                            toTimestamp(2018, 8, 22),
-                            toTimestamp(2018, 9, 1),
-                            toTimestamp(2018, 9, 11),
-                            toTimestamp(2018, 9, 21),
-                            toTimestamp(2018, 10, 1)];
+        data.cutofftimes = [toTimestamp(2018, 9, 1),
+        toTimestamp(2018, 9, 8),
+        toTimestamp(2018, 9, 15),
+        toTimestamp(2018, 9, 22),
+        toTimestamp(2018, 9, 29),
+        toTimestamp(2018, 10, 8)];
     }
 
     function getBonusFactor(uint timestamp, BonusData storage data)
@@ -68,10 +68,10 @@ library Bonus {
         uint8[12] memory monthDayCounts;
         monthDayCounts[0] = 31;
         if (isLeapYear(year)) {
-                monthDayCounts[1] = 29;
+            monthDayCounts[1] = 29;
         }
         else {
-                monthDayCounts[1] = 28;
+            monthDayCounts[1] = 28;
         }
         monthDayCounts[2] = 31;
         monthDayCounts[3] = 30;
